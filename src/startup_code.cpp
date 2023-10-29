@@ -5,7 +5,7 @@
 #include <fstream>
 #include <sstream>
 #include <cstdlib>
-// hello
+
 // Format checker just assumes you have Alarm.bif and Solved_Alarm.bif (your file) in current directory
 using namespace std;
 
