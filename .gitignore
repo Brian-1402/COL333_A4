@@ -43,3 +43,7 @@ venv/
 # Project-specific
 bin/*
 # data/*
+test
+
+src/*.bif
+src/*.dat
