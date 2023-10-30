@@ -108,15 +108,15 @@ public:
 
 	int addNode(Graph_Node *node)
 	{
-		int index = Pres_Graph.size();		 // Get the index of the added node
-		index_map[node->get_name()] = index; // Add the mapping to the map
+		int index = static_cast<int>(Pres_Graph.size()); // Get the index of the added node
+		index_map[node->get_name()] = index;			 // Add the mapping to the map
 		Pres_Graph.push_back(node);
 		return 0;
 	}
 
 	int netSize()
 	{
-		return Pres_Graph.size();
+		return static_cast<int>(Pres_Graph.size());
 	}
 	// Gets the index of node with a given name
 	int get_index(string val_name)
@@ -252,7 +252,7 @@ public:
 	network Data_network;
 	int total_variables;			// Total number of variables in the data
 	vector<vector<int>> data;		// Data is stored as integer format. Suppose a node can take 3 categories as values. Then first category is '0', then '1' and so on.
-	vector<int> missing;			// Stores index of question mark for data i
+	vector<int> missing;			// Stores index of question mark for data i. -1 if not there. Also assumes atmost one '?' per data point.
 	vector<vector<int>> datapoints; // Stores the useful data, after replacing '?' with possible values
 	vector<double> weights;			// Weights for the data that we will be using
 
@@ -262,6 +262,10 @@ public:
 		total_variables = Alarm.netSize();
 		data_reader();
 	};
+
+	void cpt_updater();
+	void dataUpdater();
+	int probabilityCalc(int i, int var, int j);
 
 	void data_reader()
 	{
@@ -358,11 +362,87 @@ void network::CPT_initializer()
 	}
 }
 
-void data_updator()
+void Data::dataUpdater()
 {
+	weights.clear(); // Clear the 'weights' vector.
+
+	for (int i = 0; i < datapoints.size(); i++)
+	{
+		int missing_idx = missing[i];
+		if (missing_idx != -1)
+		{
+			weights.push_back(1);
+			continue;
+		}
+		else
+		{
+			// Initialize a vector to store probabilities and a sum variable.
+			vector<float> probs;
+
+			int j = 0;
+
+			int nvalues = Data_network.get_nth_node(missing_idx)->get_nvalues();
+
+			while (j < nvalues)
+			{
+				// i is real data index, isse hum joint probability nikalenge
+				float probab = probabilityCalc(i, missing_idx, j);
+				for (int k = 0; k < Data_network.get_nth_node(missing_idx)->get_children().size(); k++)
+				{
+
+					int child_idx = Data_network.get_nth_node(missing_idx)->get_children()[k];
+					// joint probability of child given parent(current node)
+					float child_probab = probabilityCalc(i, child_idx, datapoints[i][child_idx]);
+					probab *= child_probab;
+				}
+				probs.push_back(probab);
+				j++;
+			}
+			int max_index = max_element(probs.begin(), probs.end()) - probs.begin();
+			datapoints[i][missing_idx] = max_index;
+
+			// sum of all probabilities
+			float sum = accumulate(probs.begin(), probs.end(), 0.0);
+			// Update the weights vector.
+			for (int j = 0; j < probs.size(); j++)
+			{
+				weights.push_back(probs[j] / sum);
+			}
+			// for (int j = 0; j < probs.size(); j++)
+			// {
+			// 	weights.push_back(probs[j]);
+			// }
+		}
+	}
 }
 
-void CPT_updator(){
+// i is index of data point, var is index of variable, j is index of value of variable
+int Data::probabilityCalc(int i, int var, int j)
+{ // joint probability of var and j
+	float probab = 1;
+	// get parents of var
+	vector<int> parents = Data_network.get_nth_node(var)->get_Parents();
+	// if no parents
+	if (parents.size() == 0)
+	{
+		probab = Data_network.get_nth_node(var)->get_CPT()[j];
+	}
+	else
+	{
+		// get index of parent
+		for (int k = 0; k < parents.size(); k++)
+		{
+			int parent_idx = parents[k];
+			// get value of parent
+			int parent_val = datapoints[i][parent_idx];
+			// get index of parent in CPT
+			int parent_CPT_idx = parent_val * Data_network.get_nth_node(var)->get_nvalues() + j;
+			probab *= Data_network.get_nth_node(var)->get_CPT()[parent_CPT_idx];
+		}
+	}
+}
+
+void Data::cpt_updater(){
 
 };
 
