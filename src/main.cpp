@@ -6,10 +6,7 @@
 #include <sstream>
 #include <cstdlib>
 #include <bits/stdc++.h>
-
-// hello
-// TODO
-// check parent string and children int
+#include <tuple>
 
 // Format checker just assumes you have Alarm.bif and Solved_Alarm.bif (your file) in current directory
 using namespace std;
@@ -19,13 +16,13 @@ class Graph_Node
 {
 
 private:
-	string Node_Name;	   // Variable name
-	int Node_Index;		   // Index of the node in the network
-	vector<int> Children;  // Children of a particular node - these are index of nodes in the graph.
-	vector<int> Parents;   // Parents of a particular node - note these are names of parents
-	int nvalues;		   // Number of categories a variable represented by this node can take
-	vector<string> values; // Categories of possible values
-	vector<float> CPT;	   // Conditional probability table as a 1-d array. Look for BIF format to understand its meaning
+	string Node_Name;		// Variable name
+	int Node_Index;			// Index of the node in the network
+	vector<int> Children;	// Children of a particular node - these are index of nodes in the graph.
+	vector<string> Parents; // Parents of a particular node - note these are names of parents
+	int nvalues;			// Number of categories a variable represented by this node can take
+	vector<string> values;	// Categories of possible values
+	vector<float> CPT;		// Conditional probability table as a 1-d array. Look for BIF format to understand its meaning
 
 public:
 	// Constructor- a node is initialized with its name and its categories
@@ -50,7 +47,7 @@ public:
 	{
 		return Children;
 	}
-	vector<int> get_Parents()
+	vector<string> get_Parents()
 	{
 		return Parents;
 	}
@@ -71,7 +68,7 @@ public:
 		CPT.clear();
 		CPT = new_CPT;
 	}
-	void set_Parents(vector<int> Parent_Nodes)
+	void set_Parents(vector<string> Parent_Nodes)
 	{
 		Parents.clear();
 		Parents = Parent_Nodes;
@@ -201,14 +198,14 @@ network read_network()
 
 				// remaining variable names are the name of the parents.
 				ss >> temp;
-				vector<int> parents;
+				vector<string> parents;
 				while (temp.compare(")") != 0)
 				{
 					// We find the parent node, modify its children list
 					// and add the parent name to the parents list of the current node.
 					Graph_Node *parent = Graph_network.search_node(temp);
 					parent->add_child(index);
-					parents.push_back(Graph_network.get_index(temp));
+					parents.push_back(temp);
 
 					ss >> temp;
 				}
@@ -255,7 +252,7 @@ public:
 	vector<int> missing;			// Stores index of question mark for data i. -1 if not there. Also assumes atmost one '?' per data point.
 	vector<vector<int>> datapoints; // Stores the useful data, after replacing '?' with possible values
 	vector<double> weights;			// Weights for the data that we will be using
-
+	vector<vector<float>> CPT;		// Conditional probability table for the missing variable
 	Data(network Alarm)
 	{
 		Data_network = Alarm;
@@ -348,12 +345,12 @@ void network::CPT_initializer()
 		// Graph_Node *ListIt = ;
 		int nvalues = listIt->get_nvalues();
 		vector<float> CPT;
-		vector<int> Parents = listIt->get_Parents();
+		vector<string> Parents = listIt->get_Parents();
 		int num_parents = Parents.size();
 		int num_combinations = nvalues;
 		for (int i = 0; i < num_parents; i++)
 		{
-			Graph_Node *parent = get_nth_node(Parents[i]);
+			Graph_Node *parent = search_node(Parents[i]);
 			int n = parent->get_nvalues();
 			num_combinations *= n;
 		}
@@ -428,7 +425,7 @@ float Data::probabilityCalc(int datapt_idx, int var, int var_val)
 	float probab = 1;
 	// get parents of var
 	//! copying is happening here, might affect performance
-	vector<int> parents = Data_network.get_nth_node(var)->get_Parents();
+	vector<string> parents = Data_network.get_nth_node(var)->get_Parents();
 	// if no parents
 	if (parents.size() == 0)
 	{
@@ -444,7 +441,7 @@ float Data::probabilityCalc(int datapt_idx, int var, int var_val)
 		//? Possible to make this faster and without a loop?
 		for (int k = static_cast<int>(parents.size()) - 1; k >= 0; k--)
 		{
-			int parent_idx = parents[k];
+			int parent_idx = Data_network.get_index(parents[k]);
 			// get value of parent.
 			int parent_val = datapoints[datapt_idx][parent_idx];
 
@@ -458,8 +455,57 @@ float Data::probabilityCalc(int datapt_idx, int var, int var_val)
 	return probab;
 }
 
-void Data::cpt_updater(){
+void Data::cpt_updater()
+{
+	for (int i = 0; i < CPT.size(); i++)
+	{
+		CPT[i].clear();
+		CPT[i] = vector<float>(CPT[i].size(), 0.0035); // 0.0035 is smoodhing factor
 
+		vector<int> values, parameter, nvalues;
+		parameter.push_back(i);
+		int nvalues_idx = Data_network.get_index(Data_network.get_nth_node(i)->get_Parents()[0]);
+		nvalues.push_back(nvalues_idx);
+
+		for (int j = 0; j < Data_network.get_nth_node(i)->get_Parents().size(); j++)
+		{
+			int parent_idx = Data_network.get_index(Data_network.get_nth_node(i)->get_Parents()[j]);
+			parameter.push_back(parent_idx);
+			nvalues.push_back(Data_network.get_nth_node(parent_idx)->get_nvalues());
+		}
+
+		int slot_size = (CPT.size() / nvalues_idx);
+		vector<double> denominators(slot_size, 0.0), numerators(nvalues_idx, 0.0);
+
+		for (int j = 0; j < Data_network.get_nth_node(i)->get_nvalues(); j++)
+		{
+			values.clear();
+			for (int k = 0; k < slot_size; k++)
+			{
+				values.push_back(datapoints[j][parameter[0]]);
+			}
+			int index = 0;
+			// find index of parameter in cpt
+			if (values.size() > 0)
+			{
+				int a = 0, b = 1;
+				int m = nvalues.size();
+				for (int p = m - 1; p >= 0; p--)
+				{
+					index += values[p] * b;
+					b *= nvalues[p];
+				}
+			}
+			numerators[index] += weights[j];
+			denominators[index / slot_size] += weights[j];
+		}
+		double temp;
+		for (int j = 0; j < CPT[i].size(); j++)
+		{
+			temp = numerators[j] + 0.0035 / denominators[j / slot_size] + 0.0035 * nvalues[j / slot_size];
+			CPT[i][j] = temp;
+		}
+	}
 };
 
 int main()
