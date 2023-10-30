@@ -279,6 +279,7 @@ public:
 		else
 		{
 			while (!myfile.eof())
+			// for each line in the file
 			{
 				stringstream ss;
 				getline(myfile, line);
@@ -286,7 +287,9 @@ public:
 				ss.str(line);
 				int missing_idx = -1; // Stores the index of the unknown value
 				for (int i = 0; i < total_variables; i++)
+				// for each variable value in the line
 				{
+					// temp represents the value of the ith variable
 					ss >> temp;
 					// if (temp.compare("?") == 0)
 					// std::cout << temp << std::endl;
@@ -321,16 +324,17 @@ public:
 					int k = Data_network.get_nth_node(node_idx)->get_nvalues();
 					for (int i = 0; i < k; i++)
 					{
+						// copying values_dataset into probable_values
 						vector<int> probable_values(values_dataset.begin(), values_dataset.end());
 						probable_values[missing_idx] = i;
 						data.push_back(probable_values);
-						weights.push_back(1 / k);
+						weights.push_back(1 / static_cast<float>(k));
 					}
 				}
 				else
 				{
 					data.push_back(values_dataset);
-					weights.push_back(1);
+					weights.push_back(1.0);
 				}
 			}
 		}
