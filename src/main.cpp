@@ -265,7 +265,7 @@ public:
 
 	void cpt_updater();
 	void dataUpdater();
-	int probabilityCalc(int i, int var, int j);
+	float probabilityCalc(int i, int var, int j);
 
 	void data_reader()
 	{
@@ -420,30 +420,42 @@ void Data::dataUpdater()
 	}
 }
 
-// i is index of data point, var is index of variable, j is index of value of variable
-int Data::probabilityCalc(int i, int var, int j)
-{ // joint probability of var and j
+// Finds P(var = j | parents of var), by finding position of that value in the CPT of var node.
+// i is index of data point, var is index of variable, j is index of value of variable.
+// Implied that var is the likely missing variable, and it's parents are known.
+float Data::probabilityCalc(int datapt_idx, int var, int var_val)
+{
 	float probab = 1;
 	// get parents of var
+	//! copying is happening here, might affect performance
 	vector<int> parents = Data_network.get_nth_node(var)->get_Parents();
 	// if no parents
 	if (parents.size() == 0)
 	{
-		probab = Data_network.get_nth_node(var)->get_CPT()[j];
+		probab = Data_network.get_nth_node(var)->get_CPT()[var_val];
 	}
 	else
 	{
+		// position of CPT val = p1val* 1 + p2val * (p1) + p3val * (p1*p2) ... + var_val* Prod(all p nvals).
+		// Note: In the above, p is numbered from the back.
 		// get index of parent
-		for (int k = 0; k < parents.size(); k++)
+		int base = 1;
+		int CPT_idx = 0;
+		//? Possible to make this faster and without a loop?
+		for (int k = static_cast<int>(parents.size()) - 1; k >= 0; k--)
 		{
 			int parent_idx = parents[k];
-			// get value of parent
-			int parent_val = datapoints[i][parent_idx];
-			// get index of parent in CPT
-			int parent_CPT_idx = parent_val * Data_network.get_nth_node(var)->get_nvalues() + j;
-			probab *= Data_network.get_nth_node(var)->get_CPT()[parent_CPT_idx];
+			// get value of parent.
+			int parent_val = datapoints[datapt_idx][parent_idx];
+
+			CPT_idx += parent_val * base;
+			// base is multiplied with number of values of current parent.
+			base *= Data_network.get_nth_node(parent_idx)->get_nvalues();
 		}
+		CPT_idx += var_val * base;
+		probab = Data_network.get_nth_node(var)->get_CPT()[CPT_idx];
 	}
+	return probab;
 }
 
 void Data::cpt_updater(){
